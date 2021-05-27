@@ -4,14 +4,14 @@ import play.api.libs.json.{Json, OFormat}
 
 case class MovieInfo(
                              _id: String,
-                             timestamp: String,
-                             sourceIp: String,
+                             title: String,
+                             view_count: Int,
                              url: String,
                              latency: Long
                            )
 
 
 
-object VisitWithLatency {
-  implicit val format: OFormat[VisitWithLatency] = Json.format[VisitWithLatency]
+object MovieInfo {
+  implicit val format: OFormat[MovieInfo] = Json.format[MovieInfo]
 }
