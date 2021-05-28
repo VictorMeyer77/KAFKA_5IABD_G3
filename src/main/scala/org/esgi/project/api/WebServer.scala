@@ -6,9 +6,9 @@ import akka.http.scaladsl.server.Route
 import de.heikoseeberger.akkahttpplayjson.PlayJsonSupport
 import org.apache.kafka.streams.KafkaStreams
 import org.apache.kafka.streams.state.{QueryableStoreTypes, ReadOnlyKeyValueStore, ReadOnlyWindowStore, WindowStoreIterator}
-import org.esgi.project.api.models.{MeanLatencyForURLResponse, VisitCountResponse}
+import org.apache.kafka.streams.{KafkaStreams, KeyValue, StoreQueryParameters}
 import org.esgi.project.streaming.StreamProcessing
-import org.esgi.project.streaming.models.MeanLatencyForURL
+import org.esgi.project.streaming.models.{MeanScorePerMovie, Top10BestOrWorstMovies, ViewWithLike}
 
 import java.time.Instant
 import scala.jdk.CollectionConverters._
@@ -25,30 +25,11 @@ object WebServer extends PlayJsonSupport {
         get {
           period match {
             case "30s" =>
-              // TODO: load the store containing the visits count of the last 30 seconds and query it to
-              // TODO: fetch the keys of the last window and its info
-              val kvStore30Seconds: ReadOnlyWindowStore[String, Long] = ???
+              // TODO:
+              val kvStore30Seconds: ReadOnlyWindowStore[String, Long] =
 
               complete(
-                // TODO: output a list of VisitCountResponse objects
-                ???
-              )
-            case "1m" =>
-              // TODO: load the store containing the visits count of the last minute and query it to
-              // TODO: fetch the keys of the last window and its info
-              val kvStore1Minute: ReadOnlyWindowStore[String, Long] = ???
-
-              complete(
-                // TODO: output a list of VisitCountResponse objects
-                ???
-              )
-            case "5m" =>
-              // TODO: load the store containing the visits count of the last five minutes and query it to
-              // TODO: fetch the keys of the last window and its info
-              val kvStore5Minute: ReadOnlyWindowStore[String, Long] = ???
-
-              complete(
-                // TODO: output a list of VisitCountResponse objects
+                // TODO:
                 ???
               )
             case _ =>
@@ -59,17 +40,92 @@ object WebServer extends PlayJsonSupport {
           }
         }
       },
-      path("latency" / "beginning") {
+      // TODO: TOP 10 best movies
+      path("stats"/"ten"/"best"/"score") {
         get {
-          // TODO: output the mean latency per URL since the start of the app
-          val kvStoreMeanLatencyPerURL: ReadOnlyKeyValueStore[String, MeanLatencyForURL] = ???
-
+          val kvStoreBestMovies: ReadOnlyKeyValueStore[String, MeanScorePerMovie] = streams
+            .store(
+              StoreQueryParameters.fromNameAndType(
+                StreamProcessing.scoreWithMovieOutputTableName,
+                QueryableStoreTypes.keyValueStore[String, MeanScorePerMovie]()
+              )
+            )
+          // fetch all available keys
+          val availableKeys: List[String] = kvStoreBestMovies
+            .all()
+            .asScala
+            .map(_.key)
+            .toList
           complete(
-            // TODO: output a list of MeanLatencyForURLResponse objects
-            ???
+            availableKeys
+              .map(storeKeyToMeanScoreForTitle(kvStoreBestMovies))
+              .sortBy(_.score)(implicitly[Ordering[Double]].reverse)
+              .take(10)
           )
+
+        }
+      },
+      // TODO: TOP 10 worst movies
+      path("stats"/"ten"/"worst"/"score") {
+        get {
+          val kvStoreBestMovies: ReadOnlyKeyValueStore[String, MeanScorePerMovie] = streams
+            .store(
+              StoreQueryParameters.fromNameAndType(
+                StreamProcessing.scoreWithMovieOutputTableName,
+                QueryableStoreTypes.keyValueStore[String, MeanScorePerMovie]()
+              )
+            )
+          // fetch all available keys
+          val availableKeys: List[String] = kvStoreBestMovies
+            .all()
+            .asScala
+            .map(_.key)
+            .toList
+          complete(
+            availableKeys
+              .map(storeKeyToMeanScoreForTitle(kvStoreBestMovies))
+              .sortBy(_.score)(implicitly[Ordering[Double]])
+              .take(10)
+          )
+
+        }
+      },
+      // TODO: TOP 10 best views
+      path("stats"/"ten"/"best"/"views") {
+        get {
+          val kvStoreBestMovies: ReadOnlyKeyValueStore[String, MeanScorePerMovie] = streams
+            .store(
+              StoreQueryParameters.fromNameAndType(
+                StreamProcessing.scoreWithMovieOutputTableName,
+                QueryableStoreTypes.keyValueStore[String, MeanScorePerMovie]()
+              )
+            )
+          // fetch all available keys
+          val availableKeys: List[String] = kvStoreBestMovies
+            .all()
+            .asScala
+            .map(_.key)
+            .toList
+          complete(
+            availableKeys
+              .map((_) => (_, 1))
+              .count()
+              .sortBy()(implicitly[Ordering[Double]])
+              .take(10)
+          )
+
         }
       }
     )
+  }
+  def storeKeyToMeanScoreForTitle(store: ReadOnlyKeyValueStore[String, MeanScorePerMovie])(key: String): ViewWithLike = {
+    val row: MeanScorePerMovie = store.get(key)
+    ViewWithLike(title = key, score = row.meanScore)
+  }
+
+  def storeKeyToMeanViewsForTitle(store: ReadOnlyKeyValueStore[String, MeanScorePerMovie])(key: String): ViewWithLike = {
+//    val row: MeanScorePerMovie = store.get(key)
+//    ViewWithLike(title = key, score = row.meanScore)
+    // TODO
   }
 }

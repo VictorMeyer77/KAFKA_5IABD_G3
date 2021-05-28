@@ -5,7 +5,8 @@ import org.apache.kafka.streams.KafkaStreams
 import org.apache.kafka.streams.kstream.{JoinWindows, TimeWindows, Windowed}
 import org.apache.kafka.streams.scala._
 import org.apache.kafka.streams.scala.kstream._
-import org.esgi.project.streaming.models.{MeanLatencyForURL, Likes, Views, VisitWithLatency}
+import org.esgi.project.streaming.models.{Likes, MeanScorePerMovie, View, ViewWithLike, Top10BestViewsMovies, Top10BestOrWorstMovies}
+
 import java.io.InputStream
 import java.time.Duration
 import java.util.Properties
@@ -22,6 +23,7 @@ object StreamProcessing extends PlayJsonSupport {
   //val lastMinuteStoreName = "ViewsOfLastMinute"
   //val lastFiveMinutesStoreName = "ViewsOfLast5Minutes"
   //val allStoreName = "ViewsOfAllTime"
+  val scoreWithMovieOutputTableName: String = "meanScorePerMovie"
 
   val lastMinuteByCategoryStoreName = "ViewsOfLastMinuteByCategory"
   val lastFiveMinutesByCategoryStoreName = "ViewsOfLast5MinutesByCategory"
@@ -35,63 +37,47 @@ object StreamProcessing extends PlayJsonSupport {
   val builder: StreamsBuilder = new StreamsBuilder
 
   // topic sources
-  val views: KStream[String, Views] = builder.stream[String, Visit](viewsTopicName)
-  val likes: KStream[String, Likes] = builder.stream[String, Metric](likesTopicName)
+  val views: KStream[String, View] = builder.stream[String, View](viewsTopicName)
+  val likes: KStream[String, Likes] = builder.stream[String, Likes](likesTopicName)
 
   /**
    * -------------------
-   * Part.1 of exercise
+   * Part.1
    * -------------------
    */
   // Repartitioning views with visit URL as key, then group them by key
-  val viewsGroupedByUrl: KGroupedStream[String, Visit] = views
-    .map((_, visit) => (visit.url, visit))
+  val viewsGroupedByCategoryAndTitle: KGroupedStream[String, View] = views
+    .map((_, view) => (view.title+"|"+view.view_category, view))
     .groupByKey
 
-  val viewsOfLast30Seconds: KTable[Windowed[String], Long] = viewsGroupedByUrl
-    .windowedBy(TimeWindows.of(Duration.ofSeconds(30)).advanceBy(Duration.ofSeconds(1)))
+
+  val viewsFromBeginning: KTable[String, Long] = viewsGroupedByCategoryAndTitle
     .count()
 
-  val viewsOfLast1Minute: KTable[Windowed[String], Long] = viewsGroupedByUrl
-    .windowedBy(TimeWindows.of(Duration.ofMinutes(1)).advanceBy(Duration.ofMinutes(1)))
+  val viewsOfLastMinute: KTable[Windowed[String], Long] = viewsGroupedByCategoryAndTitle
+    .windowedBy(TimeWindows.of(Duration.ofMinutes(1)).advanceBy(Duration.ofSeconds(1)))
     .count()
 
-  val viewsOfLast5Minute: KTable[Windowed[String], Long] = viewsGroupedByUrl
-    .windowedBy(TimeWindows.of(Duration.ofMinutes(5)).advanceBy(Duration.ofMinutes(1)))
+  val viewsOfLast5Minutes: KTable[Windowed[String], Long] = viewsGroupedByCategoryAndTitle
+    .windowedBy(TimeWindows.of(Duration.ofMinutes(5)).advanceBy(Duration.ofSeconds(1)))
     .count()
 
-  /**
-   * -------------------
-   * Part.2 of exercise
-   * -------------------
-   */
-  val viewsGroupedByCategory: KGroupedStream[String, Visit] = views
-    .map((_, visit) => (visit.url.split("/")(1), visit))
-    .groupByKey(Grouped.`with`)
 
-  val viewsOfLast30SecondsByCategory: KTable[Windowed[String], Long] = viewsGroupedByCategory
-    .windowedBy(TimeWindows.of(Duration.ofSeconds(30)).advanceBy(Duration.ofSeconds(1)))
-    .count()
-
-  val viewsOfLast1MinuteByCategory: KTable[Windowed[String], Long] = viewsGroupedByCategory
-    .windowedBy(TimeWindows.of(Duration.ofMinutes(1)).advanceBy(Duration.ofMinutes(1)))
-    .count()
-
-  val viewsOfLast5MinuteByCategory: KTable[Windowed[String], Long] = viewsGroupedByCategory
-    .windowedBy(TimeWindows.of(Duration.ofMinutes(5)).advanceBy(Duration.ofMinutes(1)))
-    .count()
-
-  val viewsWithMetrics: KStream[String, VisitWithLatency] = views
-    .join(likes)({ (visit, metric) =>
-      VisitWithLatency(_id = visit._id, timestamp = visit.timestamp, sourceIp = visit.sourceIp, url = visit.url, latency = metric.latency)
+  val viewsWithLikes: KStream[String, ViewWithLike] = views
+    .join(likes)({ (view, like) =>
+      ViewWithLike(title = view.title, score = like.score)
     }, JoinWindows.of(Duration.ofSeconds(5)))
 
-  val meanLatencyPerUrl: KTable[String, MeanLatencyForURL] = viewsWithMetrics
-    .map((_, visitWithLatency) => (visitWithLatency.url, visitWithLatency))
+  val meanScorePerMovie: KTable[String, MeanScorePerMovie] = viewsWithLikes
+    .map((_, viewWithScore) => (viewWithScore.title, viewWithScore))
     .groupByKey
-    .aggregate(MeanLatencyForURL.empty) { (_, newVisitWithLatency, accumulator) =>
-      accumulator.increment(latency = newVisitWithLatency.latency).computeMeanLatency
-    }
+    .aggregate(MeanScorePerMovie.empty) { (_, newMovieWithScore, accumulator) =>
+      accumulator.increment(score = newMovieWithScore.score).computeMeanScore
+    }(Materialized.as(scoreWithMovieOutputTableName))
+
+
+
+
 
   def run(): KafkaStreams = {
     val streams: KafkaStreams = new KafkaStreams(builder.build(), props)

@@ -3,12 +3,11 @@ package org.esgi.project.streaming.models
 import play.api.libs.json.{Json, OFormat}
 
 case class MovieInfo(
-                             _id: String,
-                             title: String,
-                             view_count: Int,
-                             url: String,
-                             latency: Long
-                           )
+                      _id: String,
+                      title: String,
+                      view_count: Int,
+                      stats: MovieStats
+                    )
 
 
 

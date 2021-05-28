@@ -3,9 +3,9 @@ package org.esgi.project.streaming.models
 import play.api.libs.json.{Json, OFormat}
 
 case class MovieStats(
-                   past: Stat,
-                   last_minute: Stat,
-                   last_five_minutes: Stat
+                   past: MovieStat,
+                   last_minute: MovieStat,
+                   last_five_minutes: MovieStat
                  )
 
 
