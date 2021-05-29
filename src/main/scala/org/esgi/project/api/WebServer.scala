@@ -7,8 +7,9 @@ import de.heikoseeberger.akkahttpplayjson.PlayJsonSupport
 import org.apache.kafka.streams.KafkaStreams
 import org.apache.kafka.streams.state.{QueryableStoreTypes, ReadOnlyKeyValueStore, ReadOnlyWindowStore, WindowStoreIterator}
 import org.apache.kafka.streams.{KafkaStreams, KeyValue, StoreQueryParameters}
+import org.esgi.project.api.models.{TitleWithScore, TitleWithViews}
 import org.esgi.project.streaming.StreamProcessing
-import org.esgi.project.streaming.models.{MeanScorePerMovie, Top10BestOrWorstMovies, ViewWithLike}
+import org.esgi.project.streaming.models.{MeanScorePerMovie, Top10BestOrWorstMovies}
 
 import java.time.Instant
 import scala.jdk.CollectionConverters._
@@ -21,10 +22,10 @@ import scala.jdk.CollectionConverters._
 object WebServer extends PlayJsonSupport {
   def routes(streams: KafkaStreams): Route = {
     concat(
-//      path("visits" / Segment) { period: String =>
+//      path("movie" / Segment) { id: String =>
 //        get {
 //          period match {
-//            case "30s" =>
+//            case  =>
 //              // TODO:
 //              val kvStore30Seconds: ReadOnlyWindowStore[String, Long] =
 //
@@ -93,43 +94,31 @@ object WebServer extends PlayJsonSupport {
       // TODO: TOP 10 best views
       path("stats"/"ten"/"best"/"views") {
         get {
-          val kvStoreBestMovies: ReadOnlyKeyValueStore[String, MeanScorePerMovie] = streams
+          val kvStoreBestMovies: ReadOnlyKeyValueStore[String, Long] = streams
             .store(
               StoreQueryParameters.fromNameAndType(
-                StreamProcessing.scoreWithMovieOutputTableName,
-                QueryableStoreTypes.keyValueStore[String, MeanScorePerMovie]()
+                StreamProcessing.viewsPerMovieOutputTableName,//viewsPerMovieOutputTableName
+                QueryableStoreTypes.keyValueStore[String, Long]()
               )
             )
-          // fetch all available keys
-          val availableKeys: List[String] = kvStoreBestMovies
-            .all()
-            .asScala
-            .map(_.key)
-            .toList
-          val aa =kvStoreBestMovies
-//            .map((_) => (_, 1))
-          println(availableKeys)
           complete(
-            "aaaaaaaaa"
-//              .fore
-////              .reduce((x,y) => x+y)
-//              .count()
-//              .sortBy()(implicitly[Ordering[Int]])
-//              .take(10)
+            kvStoreBestMovies
+              .all()
+              .asScala
+              .map{keyvalue => TitleWithViews(title = keyvalue.key, views = keyvalue.value)}
+              .toList
+              .sortBy(_.views)(implicitly[Ordering[Long]].reverse)
+              .take(10)
           )
 
         }
       }
     )
   }
-  def storeKeyToMeanScoreForTitle(store: ReadOnlyKeyValueStore[String, MeanScorePerMovie])(key: String): ViewWithLike = {
+  def storeKeyToMeanScoreForTitle(store: ReadOnlyKeyValueStore[String, MeanScorePerMovie])(key: String): TitleWithScore = {
     val row: MeanScorePerMovie = store.get(key)
-    ViewWithLike(title = key, score = row.meanScore)
+    TitleWithScore(title = key, score = row.meanScore)
   }
 
-//  def storeKeyToMeanViewsForTitle(store: ReadOnlyKeyValueStore[String, MeanScorePerMovie])(key: String): ViewWithLike = {
-//    val row: MeanScorePerMovie = store.get(key)
-//    ViewWithLike(title = key, score = row.meanScore)
-//    // TODO
-//  }
+
 }
