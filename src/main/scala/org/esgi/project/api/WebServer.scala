@@ -21,25 +21,25 @@ import scala.jdk.CollectionConverters._
 object WebServer extends PlayJsonSupport {
   def routes(streams: KafkaStreams): Route = {
     concat(
-      path("visits" / Segment) { period: String =>
-        get {
-          period match {
-            case "30s" =>
-              // TODO:
-              val kvStore30Seconds: ReadOnlyWindowStore[String, Long] =
-
-              complete(
-                // TODO:
-                ???
-              )
-            case _ =>
-              // unhandled period asked
-              complete(
-                HttpResponse(StatusCodes.NotFound, entity = "Not found")
-              )
-          }
-        }
-      },
+//      path("visits" / Segment) { period: String =>
+//        get {
+//          period match {
+//            case "30s" =>
+//              // TODO:
+//              val kvStore30Seconds: ReadOnlyWindowStore[String, Long] =
+//
+//              complete(
+//                // TODO:
+//                ???
+//              )
+//            case _ =>
+//              // unhandled period asked
+//              complete(
+//                HttpResponse(StatusCodes.NotFound, entity = "Not found")
+//              )
+//          }
+//        }
+//      },
       // TODO: TOP 10 best movies
       path("stats"/"ten"/"best"/"score") {
         get {
@@ -106,12 +106,16 @@ object WebServer extends PlayJsonSupport {
             .asScala
             .map(_.key)
             .toList
+          val aa =kvStoreBestMovies
+//            .map((_) => (_, 1))
+          println(availableKeys)
           complete(
-            availableKeys
-              .map((_) => (_, 1))
-              .count()
-              .sortBy()(implicitly[Ordering[Double]])
-              .take(10)
+            "aaaaaaaaa"
+//              .fore
+////              .reduce((x,y) => x+y)
+//              .count()
+//              .sortBy()(implicitly[Ordering[Int]])
+//              .take(10)
           )
 
         }
@@ -123,9 +127,9 @@ object WebServer extends PlayJsonSupport {
     ViewWithLike(title = key, score = row.meanScore)
   }
 
-  def storeKeyToMeanViewsForTitle(store: ReadOnlyKeyValueStore[String, MeanScorePerMovie])(key: String): ViewWithLike = {
+//  def storeKeyToMeanViewsForTitle(store: ReadOnlyKeyValueStore[String, MeanScorePerMovie])(key: String): ViewWithLike = {
 //    val row: MeanScorePerMovie = store.get(key)
 //    ViewWithLike(title = key, score = row.meanScore)
-    // TODO
-  }
+//    // TODO
+//  }
 }
