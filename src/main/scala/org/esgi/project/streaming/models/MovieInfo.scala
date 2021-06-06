@@ -4,8 +4,8 @@ import play.api.libs.json.{Json, OFormat}
 
 case class MovieInfo(
                       _id: String,
-                      title: String,
-                      view_count: Int,
+//                      title: String,
+                      view_count: Long,
                       stats: MovieStats
                     )
 

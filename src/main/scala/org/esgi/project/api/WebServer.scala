@@ -9,38 +9,95 @@ import org.apache.kafka.streams.state.{QueryableStoreTypes, ReadOnlyKeyValueStor
 import org.apache.kafka.streams.{KafkaStreams, KeyValue, StoreQueryParameters}
 import org.esgi.project.api.models.{TitleWithScore, TitleWithViews}
 import org.esgi.project.streaming.StreamProcessing
-import org.esgi.project.streaming.models.{MeanScorePerMovie, Top10BestOrWorstMovies}
+import org.esgi.project.streaming.models.{MeanScorePerMovie, MovieInfo, MovieStat, MovieStats, Top10BestOrWorstMovies, View}
 
 import java.time.Instant
 import scala.jdk.CollectionConverters._
 
-/**
- * -------------------
- * Part.3 of exercise: Interactive Queries
- * -------------------
- */
+
 object WebServer extends PlayJsonSupport {
   def routes(streams: KafkaStreams): Route = {
     concat(
-//      path("movie" / Segment) { id: String =>
-//        get {
-//          period match {
-//            case  =>
-//              // TODO:
-//              val kvStore30Seconds: ReadOnlyWindowStore[String, Long] =
-//
-//              complete(
-//                // TODO:
-//                ???
-//              )
-//            case _ =>
-//              // unhandled period asked
-//              complete(
-//                HttpResponse(StatusCodes.NotFound, entity = "Not found")
-//              )
-//          }
-//        }
-//      },
+      path("movie" / Segment) { movie_id: String =>
+        get {
+          // TODO: load all the stored tables and create a MovieInfo object
+          val kvStoreMoviesFromBeginning: ReadOnlyKeyValueStore[String, Long] = streams
+            .store(
+              StoreQueryParameters.fromNameAndType(
+                StreamProcessing.viewsFromBeginningOutputTableName,
+                QueryableStoreTypes.keyValueStore[String, Long]()
+              )
+            )
+
+          //          val kvStoreMoviesViewsPerID: ReadOnlyKeyValueStore[Int, Long] = streams
+          //            .store(
+          //              StoreQueryParameters.fromNameAndType(
+          //                StreamProcessing.viewsPerMovieIdOutputTableName,
+          //                QueryableStoreTypes.keyValueStore[Int, Long]()
+          //              )
+          //            )
+
+          //          val kvStoreViewsTopic: ReadOnlyKeyValueStore[String, View] = streams
+          //            .store(
+          //              StoreQueryParameters.fromNameAndType(
+          //                StreamProcessing.viewsTopicOutputTableName,
+          //                QueryableStoreTypes.keyValueStore[String, View]()
+          //              )
+          //            )
+
+          val kvStoreMoviesLastMinute = streams
+            .store(
+              StoreQueryParameters.fromNameAndType(
+                StreamProcessing.viewsOfLastMinuteOutputTableName,
+                QueryableStoreTypes.windowStore[String, Long]()
+              )
+            )
+
+          val kvStoreMoviesLast5Minutes = streams
+            .store(
+              StoreQueryParameters.fromNameAndType(
+                StreamProcessing.viewsOfLast5MinutesOutputTableName,
+                QueryableStoreTypes.windowStore[String, Long]()
+              )
+            )
+
+          val timeNow: Instant = Instant.now()
+          val timeLastMin: Instant = Instant.now().minusSeconds(60)
+          val timeLast5Min: Instant = Instant.now().minusSeconds(300)
+
+
+          val movie_stats_var: MovieStats = MovieStats(
+            past = MovieStat(
+              start_only = kvStoreMoviesFromBeginning.get(movie_id+"|start_only"),
+              half = kvStoreMoviesFromBeginning.get(movie_id+"|half"),
+              full = kvStoreMoviesFromBeginning.get(movie_id+"|full")
+            ),
+            last_minute = MovieStat(
+              start_only = kvStoreMoviesLastMinute.fetch(movie_id+"|start_only", timeLastMin, timeNow).asScala.toList.lastOption.map(_.value).getOrElse(0),
+              half = kvStoreMoviesLastMinute.fetch(movie_id+"|half", timeLastMin, timeNow).asScala.toList.lastOption.map(_.value).getOrElse(0),
+              full = kvStoreMoviesLastMinute.fetch(movie_id+"|full", timeLastMin, timeNow).asScala.toList.lastOption.map(_.value).getOrElse(0),
+            ),
+            last_five_minutes = MovieStat(
+              start_only = kvStoreMoviesLast5Minutes.fetch(movie_id+"|start_only", timeLast5Min, timeNow).asScala.toList.lastOption.map(_.value).getOrElse(0),
+              half = kvStoreMoviesLast5Minutes.fetch(movie_id+"|half", timeLast5Min, timeNow).asScala.toList.lastOption.map(_.value).getOrElse(0),
+              full = kvStoreMoviesLast5Minutes.fetch(movie_id+"|full", timeLast5Min, timeNow).asScala.toList.lastOption.map(_.value).getOrElse(0),
+            )
+          )
+
+          println(movie_stats_var)
+
+          val movie_info_var: MovieInfo = MovieInfo(
+            _id = movie_id,
+            //            title = kvStoreViewsTopic.get(movie_id).title,
+            view_count = kvStoreMoviesFromBeginning.get(movie_id+"|full"),
+            stats = movie_stats_var,
+          )
+
+          complete(
+            movie_info_var
+          )
+        }
+      },
       // TODO: TOP 10 best movies
       path("stats"/"ten"/"best"/"score") {
         get {
@@ -97,7 +154,7 @@ object WebServer extends PlayJsonSupport {
           val kvStoreBestMovies: ReadOnlyKeyValueStore[String, Long] = streams
             .store(
               StoreQueryParameters.fromNameAndType(
-                StreamProcessing.viewsPerMovieOutputTableName,//viewsPerMovieOutputTableName
+                StreamProcessing.viewsPerMovieOutputTableName,
                 QueryableStoreTypes.keyValueStore[String, Long]()
               )
             )
@@ -120,5 +177,19 @@ object WebServer extends PlayJsonSupport {
     TitleWithScore(title = key, score = row.meanScore)
   }
 
+  //  def storeKeyToMeanScoreForTitle(fromBeginningTable: ReadOnlyKeyValueStore[String, Long],
+  //                                  lastMinuteTable: ReadOnlyKeyValueStore[String, Long],
+  //                                  last5MinutesTable: ReadOnlyKeyValueStore[String, Long])(key: String): MovieInfo = {
+  //    val row: MeanScorePerMovie = store.get(key)
+  //    MovieInfo(_id = key, title = row.title, score = row.meanScore)
+  //  }
+
+
+
+
+
+  val viewsFromBeginningOutputTableName: String = "viewsPerMovieAll"
+  val viewsOfLastMinuteOutputTableName: String = "viewsPerMovieLastMinute"
+  val viewsOfLast5MinutesOutputTableName: String = "viewsPerMovieLast5Minutes"
 
 }

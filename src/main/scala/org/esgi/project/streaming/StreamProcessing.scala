@@ -6,7 +6,7 @@ import org.apache.kafka.streams.kstream.{JoinWindows, TimeWindows, Windowed}
 import org.apache.kafka.streams.scala._
 import org.apache.kafka.streams.scala.kstream._
 import org.esgi.project.api.models.TitleWithScore
-import org.esgi.project.streaming.models.{Likes, MeanScorePerMovie, Top10BestOrWorstMovies, Top10BestViewsMovies, View}
+import org.esgi.project.streaming.models.{Likes, MeanScorePerMovie, MovieStat, Top10BestOrWorstMovies, Top10BestViewsMovies, View}
 
 import java.io.InputStream
 import java.time.Duration
@@ -26,6 +26,12 @@ object StreamProcessing extends PlayJsonSupport {
   //val allStoreName = "ViewsOfAllTime"
   val scoreWithMovieOutputTableName: String = "meanScorePerMovie"
   val viewsPerMovieOutputTableName: String = "viewsPerMovie"
+  val viewsTopicOutputTableName: String = "viewsTopicAll"
+  val viewsPerMovieIdOutputTableName: String = "viewsCountPerID"
+  val viewsFromBeginningOutputTableName: String = "viewsPerMovieAll"
+  val viewsOfLastMinuteOutputTableName: String = "viewsPerMovieLastMinute"
+  val viewsOfLast5MinutesOutputTableName: String = "viewsPerMovieLast5Minutes"
+
 
   val lastMinuteByCategoryStoreName = "ViewsOfLastMinuteByCategory"
   val lastFiveMinutesByCategoryStoreName = "ViewsOfLast5MinutesByCategory"
@@ -44,37 +50,63 @@ object StreamProcessing extends PlayJsonSupport {
 
   /**
    * -------------------
-   * Part.1
+   * movies info
    * -------------------
    */
+  val moviesGroupedByCategory: KGroupedStream[String, View] = views
+    .map((_, view) => (view._id+"|"+view.view_category, view))
+    .groupByKey
 
+  val viewsGroupedById: KTable[Int, Long] = views
+    .map((_, view) => (view._id, view))
+    .groupByKey
+    .count()(Materialized.as(viewsPerMovieIdOutputTableName))
+
+
+//  val viewsTable: KTable[String, View] = builder.table("View", Materialized.as(viewsTopicOutputTableName))
+
+//  val viewsomBeginning: KTable[String, View] = views
+
+  val viewsFromBeginning: KTable[String, Long] = moviesGroupedByCategory
+    .count()(Materialized.as(viewsFromBeginningOutputTableName))
+//  println("AAAAAAAAAAAAAAAAAAAAAAAAAAAAA: "+moviesGroupedByCategory.count())
+
+//  val viewsFromBeginningAll: KTable[String, Long] = moviesGroupedByCategory
+
+  val viewsOfLastMinute: KTable[Windowed[String], Long] = moviesGroupedByCategory
+    .windowedBy(TimeWindows.of(Duration.ofMinutes(1)).advanceBy(Duration.ofSeconds(1)))
+    .count()(Materialized.as(viewsOfLastMinuteOutputTableName))
+
+//  val moviesGroupedByCategoryStats: KTable[String, MovieStat] = viewsOfLastMinute
+
+
+  val viewsOfLast5Minutes: KTable[Windowed[String], Long] = moviesGroupedByCategory
+    .windowedBy(TimeWindows.of(Duration.ofMinutes(5)).advanceBy(Duration.ofSeconds(1)))
+    .count()(Materialized.as(viewsOfLast5MinutesOutputTableName))
+
+
+  /**
+   * -------------------
+   * table for movies views
+   * -------------------
+   */
   val viewsGroupedByTitle: KTable[String, Long] = views
-    .map((_, view) => (view.title, view))
+    .map((_, view) => (view.title+" (id="+view._id.toString+")", view))  //.map((_, view) => (view.title+" (id="+view._id+")", view))
     .groupByKey
     .count()(Materialized.as(viewsPerMovieOutputTableName))
+  println("NNNNNNNNNNNN"+viewsGroupedByTitle)
 
-  // Repartitioning views with visit URL as key, then group them by key
-  val viewsGroupedByCategoryAndTitle: KGroupedStream[String, View] = views
-    .map((_, view) => (view.title+"|"+view.view_category, view))
-    .groupByKey
-
-
-  val viewsFromBeginning: KTable[String, Long] = viewsGroupedByCategoryAndTitle
-    .count()//(Materialized.as(viewsPerMovieOutputTableName))
-
-  val viewsOfLastMinute: KTable[Windowed[String], Long] = viewsGroupedByCategoryAndTitle
-    .windowedBy(TimeWindows.of(Duration.ofMinutes(1)).advanceBy(Duration.ofSeconds(1)))
-    .count()
-
-  val viewsOfLast5Minutes: KTable[Windowed[String], Long] = viewsGroupedByCategoryAndTitle
-    .windowedBy(TimeWindows.of(Duration.ofMinutes(5)).advanceBy(Duration.ofSeconds(1)))
-    .count()
-
+  /**
+   * -------------------
+   * table for best/worst movies
+   * -------------------
+   */
 
   val viewsWithLikes: KStream[String, TitleWithScore] = views
     .join(likes)({ (view, like) =>
       TitleWithScore(title = view.title, score = like.score)
     }, JoinWindows.of(Duration.ofSeconds(5)))
+
 
   val meanScorePerMovie: KTable[String, MeanScorePerMovie] = viewsWithLikes
     .map((_, viewWithScore) => (viewWithScore.title, viewWithScore))
@@ -97,6 +129,12 @@ object StreamProcessing extends PlayJsonSupport {
     }))
     streams
   }
+
+//  def storeKeyToVisitCount(store: ReadOnlyWindowStore[String, Long])(
+//    key: String): VisitCountResponse = {
+//    val row: WindowStoreIterator[Long] = store.fetch(key, from, to)
+//    VisitCountResponse(url = key, count = row.asScala.toList.last.value)
+//  }
 
   // auto loader from properties file in project
   def buildProperties: Properties = {
