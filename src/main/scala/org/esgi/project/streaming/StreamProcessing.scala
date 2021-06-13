@@ -28,6 +28,7 @@ object StreamProcessing extends PlayJsonSupport {
   val viewsPerMovieOutputTableName: String = "viewsPerMovie"
   val viewsTopicOutputTableName: String = "viewsTopicAll"
   val viewsPerMovieIdOutputTableName: String = "viewsCountPerID"
+  val viewsPerMovieIdAndTitleOutputTableName: String = "viewsCountPerIDAndTitle"
   val viewsFromBeginningOutputTableName: String = "viewsPerMovieAll"
   val viewsOfLastMinuteOutputTableName: String = "viewsPerMovieLastMinute"
   val viewsOfLast5MinutesOutputTableName: String = "viewsPerMovieLast5Minutes"
@@ -57,27 +58,27 @@ object StreamProcessing extends PlayJsonSupport {
     .map((_, view) => (view._id+"|"+view.view_category, view))
     .groupByKey
 
+  val moviesGroupedByIdAndName: KTable[String, Long] = views
+    .map((_, view) => (view._id+"|"+view.title, view))
+    .groupByKey
+    .count()(Materialized.as(viewsPerMovieIdAndTitleOutputTableName))
+
   val viewsGroupedById: KTable[Int, Long] = views
     .map((_, view) => (view._id, view))
     .groupByKey
     .count()(Materialized.as(viewsPerMovieIdOutputTableName))
 
 
-//  val viewsTable: KTable[String, View] = builder.table("View", Materialized.as(viewsTopicOutputTableName))
 
-//  val viewsomBeginning: KTable[String, View] = views
 
   val viewsFromBeginning: KTable[String, Long] = moviesGroupedByCategory
     .count()(Materialized.as(viewsFromBeginningOutputTableName))
-//  println("AAAAAAAAAAAAAAAAAAAAAAAAAAAAA: "+moviesGroupedByCategory.count())
 
-//  val viewsFromBeginningAll: KTable[String, Long] = moviesGroupedByCategory
 
   val viewsOfLastMinute: KTable[Windowed[String], Long] = moviesGroupedByCategory
     .windowedBy(TimeWindows.of(Duration.ofMinutes(1)).advanceBy(Duration.ofSeconds(1)))
     .count()(Materialized.as(viewsOfLastMinuteOutputTableName))
 
-//  val moviesGroupedByCategoryStats: KTable[String, MovieStat] = viewsOfLastMinute
 
 
   val viewsOfLast5Minutes: KTable[Windowed[String], Long] = moviesGroupedByCategory
@@ -94,7 +95,6 @@ object StreamProcessing extends PlayJsonSupport {
     .map((_, view) => (view.title+" (id="+view._id.toString+")", view))  //.map((_, view) => (view.title+" (id="+view._id+")", view))
     .groupByKey
     .count()(Materialized.as(viewsPerMovieOutputTableName))
-  println("NNNNNNNNNNNN"+viewsGroupedByTitle)
 
   /**
    * -------------------
@@ -129,12 +129,6 @@ object StreamProcessing extends PlayJsonSupport {
     }))
     streams
   }
-
-//  def storeKeyToVisitCount(store: ReadOnlyWindowStore[String, Long])(
-//    key: String): VisitCountResponse = {
-//    val row: WindowStoreIterator[Long] = store.fetch(key, from, to)
-//    VisitCountResponse(url = key, count = row.asScala.toList.last.value)
-//  }
 
   // auto loader from properties file in project
   def buildProperties: Properties = {

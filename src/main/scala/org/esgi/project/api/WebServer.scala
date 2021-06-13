@@ -29,21 +29,13 @@ object WebServer extends PlayJsonSupport {
               )
             )
 
-          //          val kvStoreMoviesViewsPerID: ReadOnlyKeyValueStore[Int, Long] = streams
-          //            .store(
-          //              StoreQueryParameters.fromNameAndType(
-          //                StreamProcessing.viewsPerMovieIdOutputTableName,
-          //                QueryableStoreTypes.keyValueStore[Int, Long]()
-          //              )
-          //            )
-
-          //          val kvStoreViewsTopic: ReadOnlyKeyValueStore[String, View] = streams
-          //            .store(
-          //              StoreQueryParameters.fromNameAndType(
-          //                StreamProcessing.viewsTopicOutputTableName,
-          //                QueryableStoreTypes.keyValueStore[String, View]()
-          //              )
-          //            )
+          val kvStoreMoviesByIdAndTitle: ReadOnlyKeyValueStore[String, Long] = streams
+            .store(
+              StoreQueryParameters.fromNameAndType(
+                StreamProcessing.viewsPerMovieIdAndTitleOutputTableName,
+                QueryableStoreTypes.keyValueStore[String, Long]()
+              )
+            )
 
           val kvStoreMoviesLastMinute = streams
             .store(
@@ -65,7 +57,6 @@ object WebServer extends PlayJsonSupport {
           val timeLastMin: Instant = Instant.now().minusSeconds(60)
           val timeLast5Min: Instant = Instant.now().minusSeconds(300)
 
-
           val movie_stats_var: MovieStats = MovieStats(
             past = MovieStat(
               start_only = kvStoreMoviesFromBeginning.get(movie_id+"|start_only"),
@@ -84,11 +75,15 @@ object WebServer extends PlayJsonSupport {
             )
           )
 
-          println(movie_stats_var)
 
           val movie_info_var: MovieInfo = MovieInfo(
             _id = movie_id,
-            //            title = kvStoreViewsTopic.get(movie_id).title,
+            title = kvStoreMoviesByIdAndTitle.all()
+              .asScala
+              .map(movie => (movie.key.split('|')(0), movie.key.split('|')(1) ) )
+              .find(_._1 == movie_id)
+              .map(_._2)
+              .getOrElse("NON DEFINED"),
             view_count = kvStoreMoviesFromBeginning.get(movie_id+"|full"),
             stats = movie_stats_var,
           )
@@ -176,16 +171,6 @@ object WebServer extends PlayJsonSupport {
     val row: MeanScorePerMovie = store.get(key)
     TitleWithScore(title = key, score = row.meanScore)
   }
-
-  //  def storeKeyToMeanScoreForTitle(fromBeginningTable: ReadOnlyKeyValueStore[String, Long],
-  //                                  lastMinuteTable: ReadOnlyKeyValueStore[String, Long],
-  //                                  last5MinutesTable: ReadOnlyKeyValueStore[String, Long])(key: String): MovieInfo = {
-  //    val row: MeanScorePerMovie = store.get(key)
-  //    MovieInfo(_id = key, title = row.title, score = row.meanScore)
-  //  }
-
-
-
 
 
   val viewsFromBeginningOutputTableName: String = "viewsPerMovieAll"
